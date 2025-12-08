@@ -1,0 +1,62 @@
+version: '3.8'
+
+# 選民服務管理系統 - 獨立 Docker 環境
+# 使用專屬網路和 Volume，不與本機其他服務衝突
+
+services:
+  # Next.js 應用程式
+  app:
+    container_name: crm-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/constituent_crm?schema=public
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-key}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - crm-uploads:/app/uploads
+    networks:
+      - constituent-crm-network
+    restart: unless-stopped
+
+  # PostgreSQL 資料庫
+  db:
+    container_name: crm-db
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"  # 對外使用 5433，避免與本機 5432 衝突
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: constituent_crm
+    volumes:
+      - constituent-crm-postgres-data:/var/lib/postgresql/data
+    networks:
+      - constituent-crm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+# 專屬網路（與其他 Docker 服務隔離）
+networks:
+  constituent-crm-network:
+    name: constituent-crm-network
+    driver: bridge
+
+# 專屬 Volume（資料持久化）
+volumes:
+  constituent-crm-postgres-data:
+    name: constituent-crm-postgres-data
+  crm-uploads:
+    name: crm-uploads
+
+

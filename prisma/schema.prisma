@@ -1,0 +1,418 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== 認證與用戶 ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          Role      @default(STAFF)
+  isActive      Boolean   @default(true)
+  officeId      String
+  office        Office    @relation(fields: [officeId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // 關聯
+  casesCreated     Case[]         @relation("CaseCreator")
+  casesAssigned    Case[]         @relation("CaseAssignee")
+  caseProgresses   CaseProgress[]
+  eventsCreated    Event[]
+  messagesCreated  Message[]
+
+  @@index([officeId])
+  @@index([email])
+}
+
+enum Role {
+  ADMIN   // 管理員
+  STAFF   // 一般助理
+}
+
+model Office {
+  id          String   @id @default(cuid())
+  name        String   // 辦公室名稱，如「XX議員服務處」
+  city        String   @default("花蓮縣") // 服務縣市
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  users        User[]
+  constituents Constituent[]
+  cases        Case[]
+  events       Event[]
+  messages     Message[]
+}
+
+// ==================== 動態選項系統 ====================
+
+model SelectOption {
+  id        String   @id @default(cuid())
+  category  String   // 選項分類：caseType, caseCategory, actionType, occupation, eventType, relationLevel, influence
+  value     String   // 選項值（內部使用）
+  label     String   // 顯示名稱
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([category, value])
+  @@index([category, isActive])
+}
+
+// ==================== 選民管理 ====================
+
+model Constituent {
+  id            String    @id @default(cuid())
+  name          String
+  phone         String?
+  phone2        String?   // 第二支電話
+  email         String?
+  idNumber      String?   // 身分證字號（加密）
+  birthday      DateTime?
+  gender        Gender?
+  occupation    String?   // 職業（對應 SelectOption.occupation）
+  note          String?   // 備註
+  
+  // 地理位置
+  districtId    String?
+  district      District? @relation(fields: [districtId], references: [id])
+  address       String?   // 詳細地址
+
+  // 關係經營
+  relationLevel String?   // A/B/C 級（對應 SelectOption.relationLevel）
+  influence     String?   // 影響力標籤（對應 SelectOption.influence）
+  
+  // 通訊設定
+  lineUserId    String?   // LINE User ID
+  noContact     Boolean   @default(false) // 是否拒絕聯繫
+
+  // 系統欄位
+  officeId      String
+  office        Office    @relation(fields: [officeId], references: [id])
+  isDeleted     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // 關聯
+  tags              ConstituentTag[]
+  cases             CaseConstituent[]
+  eventParticipants EventParticipant[]
+  messages          Message[]
+
+  @@index([officeId, isDeleted])
+  @@index([name])
+  @@index([phone])
+  @@index([districtId])
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+// ==================== 標籤系統 ====================
+
+model TagCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique // 分類名稱：案件類別、職業身分、關係等級、影響力
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  
+  tags Tag[]
+}
+
+model Tag {
+  id         String      @id @default(cuid())
+  name       String
+  color      String?     // 標籤顏色
+  categoryId String
+  category   TagCategory @relation(fields: [categoryId], references: [id])
+  isActive   Boolean     @default(true)
+  sortOrder  Int         @default(0)
+  createdAt  DateTime    @default(now())
+
+  constituents ConstituentTag[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId, isActive])
+}
+
+model ConstituentTag {
+  id            String      @id @default(cuid())
+  constituentId String
+  constituent   Constituent @relation(fields: [constituentId], references: [id], onDelete: Cascade)
+  tagId         String
+  tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([constituentId, tagId])
+  @@index([constituentId])
+  @@index([tagId])
+}
+
+// ==================== 地理位置 ====================
+
+model District {
+  id        String   @id @default(cuid())
+  city      String   // 縣市（花蓮縣）
+  township  String   // 鄉鎮市區
+  village   String   // 村里
+  zipCode   String?  // 郵遞區號
+  createdAt DateTime @default(now())
+
+  constituents Constituent[]
+  cases        Case[]
+
+  @@unique([city, township, village])
+  @@index([city, township])
+}
+
+// ==================== 案件管理 ====================
+
+model Case {
+  id          String     @id @default(cuid())
+  title       String     // 案件標題
+  description String?    // 案件描述
+  caseType    String     // 案件類型（對應 SelectOption.caseType）
+  caseCategory String?   // 案件類別（對應 SelectOption.caseCategory）
+  priority    Priority   @default(NORMAL)
+  status      CaseStatus @default(PENDING)
+  
+  // 地點（會勘用）
+  districtId  String?
+  district    District?  @relation(fields: [districtId], references: [id])
+  location    String?    // 詳細地點描述
+  
+  // 結案資訊
+  closedAt      DateTime?
+  closedSummary String?   // 結案摘要
+  satisfaction  Satisfaction? // 滿意度
+
+  // 負責人
+  createdById String
+  createdBy   User     @relation("CaseCreator", fields: [createdById], references: [id])
+  assigneeId  String?
+  assignee    User?    @relation("CaseAssignee", fields: [assigneeId], references: [id])
+
+  // 所屬辦公室
+  officeId    String
+  office      Office   @relation(fields: [officeId], references: [id])
+
+  // 系統欄位
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 關聯
+  constituents CaseConstituent[]
+  progresses   CaseProgress[]
+  attachments  Attachment[]
+
+  @@index([officeId, status])
+  @@index([assigneeId, status])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+enum CaseStatus {
+  PENDING      // 待處理
+  IN_PROGRESS  // 處理中
+  CLOSED       // 已結案
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum Satisfaction {
+  SATISFIED     // 滿意
+  NEUTRAL       // 普通
+  UNSATISFIED   // 不滿意
+}
+
+// 案件-選民關聯
+model CaseConstituent {
+  id            String      @id @default(cuid())
+  caseId        String
+  case          Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  constituentId String
+  constituent   Constituent @relation(fields: [constituentId], references: [id])
+  role          String?     // 角色：陳情人、相關人等
+  createdAt     DateTime    @default(now())
+
+  @@unique([caseId, constituentId])
+  @@index([caseId])
+  @@index([constituentId])
+}
+
+// 案件進度
+model CaseProgress {
+  id          String   @id @default(cuid())
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  content     String   // 進度說明
+  actionType  String   // 動作類型（對應 SelectOption.actionType）
+  actionDate  DateTime // 處理日期
+  nextAction  String?  // 下一步待辦
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  attachments Attachment[]
+
+  @@index([caseId, createdAt])
+}
+
+// ==================== 活動管理 ====================
+
+model Event {
+  id          String      @id @default(cuid())
+  title       String      // 活動名稱
+  eventType   String      // 活動類型（對應 SelectOption.eventType）
+  description String?
+  eventDate   DateTime    // 活動日期
+  location    String?     // 地點
+  
+  // 紅白帖專用
+  hostName    String?     // 主人家姓名
+  deceasedName String?    // 往生者姓名（白帖）
+
+  // 出席狀態
+  attendance  AttendanceStatus @default(PENDING)
+  delegate    String?     // 代表出席者姓名
+
+  // 所屬
+  createdById String
+  createdBy   User        @relation(fields: [createdById], references: [id])
+  officeId    String
+  office      Office      @relation(fields: [officeId], references: [id])
+
+  // 系統欄位
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // 關聯
+  participants EventParticipant[]
+  attachments  Attachment[]
+
+  @@index([officeId, eventDate])
+  @@index([eventDate])
+}
+
+enum AttendanceStatus {
+  PENDING   // 待出席
+  ATTENDED  // 已出席
+  DELEGATED // 已派代表
+  MISSED    // 未出席
+}
+
+// 活動參與者
+model EventParticipant {
+  id            String      @id @default(cuid())
+  eventId       String
+  event         Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  constituentId String
+  constituent   Constituent @relation(fields: [constituentId], references: [id])
+  role          String?     // 角色：主人、賓客等
+  createdAt     DateTime    @default(now())
+
+  @@unique([eventId, constituentId])
+  @@index([eventId])
+  @@index([constituentId])
+}
+
+// ==================== 通訊管理 ====================
+
+model Message {
+  id            String        @id @default(cuid())
+  type          MessageType
+  content       String        // 訊息內容
+  templateId    String?       // 使用的範本 ID
+  
+  // 收件人
+  constituentId String
+  constituent   Constituent   @relation(fields: [constituentId], references: [id])
+  
+  // 發送狀態
+  status        MessageStatus @default(PENDING)
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  failedReason  String?
+
+  // 發送者
+  createdById   String
+  createdBy     User          @relation(fields: [createdById], references: [id])
+  officeId      String
+  office        Office        @relation(fields: [officeId], references: [id])
+
+  createdAt     DateTime      @default(now())
+
+  @@index([officeId, createdAt])
+  @@index([constituentId])
+  @@index([status])
+}
+
+enum MessageType {
+  SMS
+  LINE
+}
+
+enum MessageStatus {
+  PENDING    // 待發送
+  SENT       // 已發送
+  DELIVERED  // 已送達
+  FAILED     // 發送失敗
+}
+
+// 訊息範本
+model MessageTemplate {
+  id        String   @id @default(cuid())
+  name      String   // 範本名稱
+  content   String   // 範本內容（支援變數如 {{name}}）
+  type      MessageType
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+}
+
+// ==================== 附件管理 ====================
+
+model Attachment {
+  id          String    @id @default(cuid())
+  filename    String    // 原始檔名
+  storagePath String    // 儲存路徑
+  mimeType    String
+  size        Int       // 檔案大小（bytes）
+  
+  // 關聯（多型關聯）
+  caseId         String?
+  case           Case?          @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseProgressId String?
+  caseProgress   CaseProgress?  @relation(fields: [caseProgressId], references: [id], onDelete: Cascade)
+  eventId        String?
+  event          Event?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@index([caseId])
+  @@index([caseProgressId])
+  @@index([eventId])
+}

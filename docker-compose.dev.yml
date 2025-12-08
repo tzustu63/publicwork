@@ -1,0 +1,38 @@
+version: '3.8'
+
+# 選民服務管理系統 - 開發環境
+# 只啟動 PostgreSQL，Next.js 在本機運行（支援 hot reload）
+
+services:
+  # PostgreSQL 資料庫
+  db:
+    container_name: crm-db
+    image: postgres:16-alpine
+    ports:
+      - "5434:5432"  # 對外使用 5434
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: constituent_crm
+    volumes:
+      - constituent-crm-postgres-data:/var/lib/postgresql/data
+    networks:
+      - constituent-crm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+# 專屬網路
+networks:
+  constituent-crm-network:
+    name: constituent-crm-network
+    driver: bridge
+
+# 專屬 Volume
+volumes:
+  constituent-crm-postgres-data:
+    name: constituent-crm-postgres-data
+
