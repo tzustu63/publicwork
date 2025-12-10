@@ -2,6 +2,7 @@ version: '3.8'
 
 # 選民服務管理系統 - Lightsail 生產環境
 # 使用專屬網路、端口、Volume，完全獨立於其他服務
+# 命名規則: crm-* (constituent relationship management)
 
 services:
   # Next.js 應用程式
@@ -9,7 +10,7 @@ services:
     container_name: crm-app
     image: ghcr.io/tzustu63/publicwork:latest
     ports:
-      - "3001:3000"  # 對外 3001，避免與其他服務衝突
+      - "3005:3000"  # 對外 3005，避免與其他服務衝突
     environment:
       - DATABASE_URL=postgresql://crm_user:${DB_PASSWORD}@crm-db:5432/constituent_crm?schema=public
       - NEXTAUTH_URL=${NEXTAUTH_URL:-https://crm.harvestwize.com}
