@@ -10,7 +10,7 @@ const updateSchema = z.object({
   phone2: z.string().optional(),
   email: z.string().optional(),
   birthday: z.string().optional(),
-  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional().or(z.literal('')),
+  gender: z.string().optional(), // 允許空字串，後續再轉換
   occupation: z.string().optional(),
   note: z.string().optional(),
   districtId: z.string().optional(),
@@ -18,6 +18,8 @@ const updateSchema = z.object({
   relationLevel: z.string().optional(),
   influence: z.string().optional()
 })
+
+type GenderType = 'MALE' | 'FEMALE' | 'OTHER' | null
 
 // GET /api/constituents/[id] - 取得單一選民
 export async function GET(
@@ -83,14 +85,20 @@ export async function PUT(
       return NextResponse.json({ error: '找不到此選民' }, { status: 404 })
     }
 
-    // 清理空字串為 null
+    // 清理空字串為 null，並驗證 gender
+    const genderValue = validatedData.gender
+    const validGenders = ['MALE', 'FEMALE', 'OTHER']
+    const gender: GenderType = (genderValue && validGenders.includes(genderValue)) 
+      ? genderValue as GenderType 
+      : null
+
     const cleanData = {
       name: validatedData.name,
       phone: validatedData.phone || null,
       phone2: validatedData.phone2 || null,
       email: validatedData.email || null,
       birthday: validatedData.birthday ? new Date(validatedData.birthday) : null,
-      gender: (validatedData.gender && validatedData.gender !== '') ? validatedData.gender : null,
+      gender,
       occupation: validatedData.occupation || null,
       note: validatedData.note || null,
       districtId: validatedData.districtId || null,
@@ -111,7 +119,7 @@ export async function PUT(
     return NextResponse.json(constituent)
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      return NextResponse.json({ error: error.issues }, { status: 400 })
     }
     console.error('Error updating constituent:', error)
     return NextResponse.json({ error: '更新選民失敗' }, { status: 500 })

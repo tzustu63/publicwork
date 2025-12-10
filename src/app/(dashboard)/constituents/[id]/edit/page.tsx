@@ -2,8 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -81,15 +80,20 @@ export default function EditConstituentPage() {
   const { data: districts = [] } = useQuery<District[]>({
     queryKey: ['districts'],
     queryFn: async () => {
-      const res = await fetch('/api/districts')
+      const res = await fetch('/api/districts?all=true')
       if (!res.ok) throw new Error('Failed to fetch')
       return res.json()
     }
   })
 
-  // 填入現有資料
+  // 使用 ref 追蹤是否已初始化
+  const initializedRef = useRef(false)
+
+  // 填入現有資料（只執行一次）
   useEffect(() => {
-    if (constituent) {
+    if (constituent && !initializedRef.current) {
+      initializedRef.current = true
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 初始化表單資料需要 setState
       setFormData({
         name: constituent.name || '',
         phone: constituent.phone || '',

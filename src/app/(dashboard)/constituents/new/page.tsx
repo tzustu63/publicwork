@@ -36,7 +36,7 @@ export default function NewConstituentPage() {
 
   // 載入所有行政區資料
   useEffect(() => {
-    fetch('/api/districts')
+    fetch('/api/districts?all=true')
       .then(res => res.json())
       .then(data => setDistricts(data))
       .catch(err => console.error('Error loading districts:', err))

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useTheme } from 'next-themes'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -20,7 +21,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
+  DialogFooter,
+  DialogClose
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import {
@@ -37,69 +40,173 @@ import {
   ListPlus,
   Plus,
   Pencil,
-  GripVertical,
+  Tags,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Loader2,
+  Trash2
 } from 'lucide-react'
+import { toast } from 'sonner'
 
-// 模擬資料
-const mockUsers = [
-  { id: '1', name: '系統管理員', email: 'admin@example.com', role: 'ADMIN', isActive: true },
-  { id: '2', name: '測試助理', email: 'staff@example.com', role: 'STAFF', isActive: true },
-  { id: '3', name: '王小明', email: 'wang@example.com', role: 'STAFF', isActive: true },
-  { id: '4', name: '李小華', email: 'lee@example.com', role: 'STAFF', isActive: false }
+interface TagCategory {
+  id: string
+  name: string
+  sortOrder: number
+  tags: Tag[]
+  _count: { tags: number }
+}
+
+interface Tag {
+  id: string
+  name: string
+  color: string | null
+  categoryId: string
+  isActive: boolean
+  sortOrder: number
+  category?: TagCategory
+  _count?: { constituents: number }
+}
+
+// 預設顏色選項
+const colorOptions = [
+  { value: 'emerald', label: '綠色', class: 'bg-emerald-500' },
+  { value: 'blue', label: '藍色', class: 'bg-blue-500' },
+  { value: 'purple', label: '紫色', class: 'bg-purple-500' },
+  { value: 'amber', label: '橙色', class: 'bg-amber-500' },
+  { value: 'red', label: '紅色', class: 'bg-red-500' },
+  { value: 'pink', label: '粉色', class: 'bg-pink-500' },
+  { value: 'gray', label: '灰色', class: 'bg-gray-500' }
 ]
 
-const mockOptionCategories = [
-  {
-    category: 'caseType',
-    label: '案件類型',
-    options: [
-      { value: 'petition', label: '陳情協調', isActive: true },
-      { value: 'inspection', label: '公共建設會勘', isActive: true },
-      { value: 'legal', label: '法律諮詢', isActive: true },
-      { value: 'administrative', label: '行政諮詢', isActive: true }
-    ]
-  },
-  {
-    category: 'caseCategory',
-    label: '案件類別',
-    options: [
-      { value: 'labor', label: '勞資糾紛', isActive: true },
-      { value: 'traffic', label: '交通罰單', isActive: true },
-      { value: 'road', label: '道路問題', isActive: true },
-      { value: 'drainage', label: '水溝排水', isActive: true }
-    ]
-  },
-  {
-    category: 'relationLevel',
-    label: '關係等級',
-    options: [
-      { value: 'A', label: 'A級 - 鐵票', isActive: true },
-      { value: 'B', label: 'B級 - 友善', isActive: true },
-      { value: 'C', label: 'C級 - 搖擺', isActive: true }
-    ]
-  }
+// 模擬用戶資料（之後可改接 API）
+const mockUsers = [
+  { id: '1', name: '系統管理員', email: 'admin@example.com', role: 'ADMIN', isActive: true },
+  { id: '2', name: '測試助理', email: 'staff@example.com', role: 'STAFF', isActive: true }
 ]
 
 export default function AdminSettingsPage() {
-  const [activeTab, setActiveTab] = useState('users')
-  const [selectedCategory, setSelectedCategory] = useState(mockOptionCategories[0].category)
+  const [activeTab, setActiveTab] = useState('tags')
   const { theme, setTheme } = useTheme()
+  const queryClient = useQueryClient()
 
-  const currentCategory = mockOptionCategories.find(c => c.category === selectedCategory)
+  // 標籤相關 state
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('emerald')
+  const [editingTag, setEditingTag] = useState<Tag | null>(null)
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false)
+  const [isAddTagOpen, setIsAddTagOpen] = useState(false)
+
+  // 取得標籤分類
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery<TagCategory[]>({
+    queryKey: ['tag-categories'],
+    queryFn: async () => {
+      const res = await fetch('/api/tag-categories')
+      if (!res.ok) throw new Error('Failed to fetch')
+      return res.json()
+    }
+  })
+
+  // 設定預設選擇的分類
+  const currentCategory = selectedCategoryId 
+    ? categories.find(c => c.id === selectedCategoryId)
+    : categories[0]
+
+  // 新增分類
+  const addCategoryMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await fetch('/api/tag-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, sortOrder: categories.length })
+      })
+      if (!res.ok) throw new Error('Failed to create')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tag-categories'] })
+      setNewCategoryName('')
+      setIsAddCategoryOpen(false)
+      toast.success('分類已新增')
+    },
+    onError: () => toast.error('新增失敗')
+  })
+
+  // 新增標籤
+  const addTagMutation = useMutation({
+    mutationFn: async (data: { name: string; categoryId: string; color: string }) => {
+      const res = await fetch('/api/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      if (!res.ok) throw new Error('Failed to create')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tag-categories'] })
+      setNewTagName('')
+      setNewTagColor('emerald')
+      setIsAddTagOpen(false)
+      toast.success('標籤已新增')
+    },
+    onError: () => toast.error('新增失敗')
+  })
+
+  // 更新標籤
+  const updateTagMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Tag> }) => {
+      const res = await fetch(`/api/tags/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      if (!res.ok) throw new Error('Failed to update')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tag-categories'] })
+      setEditingTag(null)
+      toast.success('標籤已更新')
+    },
+    onError: () => toast.error('更新失敗')
+  })
+
+  // 刪除標籤
+  const deleteTagMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/tags/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tag-categories'] })
+      toast.success('標籤已刪除')
+    },
+    onError: () => toast.error('刪除失敗')
+  })
+
+  const getColorClass = (color: string | null) => {
+    const found = colorOptions.find(c => c.value === color)
+    return found?.class || 'bg-gray-500'
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">系統設定</h1>
-        <p className="text-muted-foreground mt-1">管理用戶帳號與系統選項</p>
+        <p className="text-muted-foreground mt-1">管理用戶帳號、標籤與系統選項</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
+          <TabsTrigger value="tags">
+            <Tags className="w-4 h-4 mr-2" />
+            標籤管理
+          </TabsTrigger>
           <TabsTrigger value="users">
             <Users className="w-4 h-4 mr-2" />
             用戶管理
@@ -113,6 +220,252 @@ export default function AdminSettingsPage() {
             系統設定
           </TabsTrigger>
         </TabsList>
+
+        {/* Tags Management */}
+        <TabsContent value="tags" className="mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Category List */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base">標籤分類</CardTitle>
+                <Dialog open={isAddCategoryOpen} onOpenChange={setIsAddCategoryOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="icon" variant="ghost">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>新增標籤分類</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <div className="space-y-2">
+                        <Label>分類名稱</Label>
+                        <Input
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          placeholder="例如：服務紀錄、特殊身分..."
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button variant="outline">取消</Button>
+                      </DialogClose>
+                      <Button
+                        onClick={() => addCategoryMutation.mutate(newCategoryName)}
+                        disabled={!newCategoryName || addCategoryMutation.isPending}
+                        className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white"
+                      >
+                        {addCategoryMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        新增
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardHeader>
+              <CardContent className="p-2">
+                {categoriesLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategoryId(cat.id)}
+                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
+                          currentCategory?.id === cat.id
+                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                            : 'text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <span>{cat.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {cat._count.tags}
+                        </Badge>
+                      </button>
+                    ))}
+                    {categories.length === 0 && (
+                      <p className="text-center py-4 text-muted-foreground text-sm">
+                        尚無分類
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Tags List */}
+            <Card className="lg:col-span-3">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>{currentCategory?.name || '選擇分類'}</CardTitle>
+                  <CardDescription>
+                    管理此分類下的標籤
+                  </CardDescription>
+                </div>
+                {currentCategory && (
+                  <Dialog open={isAddTagOpen} onOpenChange={setIsAddTagOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white">
+                        <Plus className="w-4 h-4 mr-1" />
+                        新增標籤
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>新增標籤</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                          <Label>標籤名稱</Label>
+                          <Input
+                            value={newTagName}
+                            onChange={(e) => setNewTagName(e.target.value)}
+                            placeholder="輸入標籤名稱"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>顏色</Label>
+                          <div className="flex gap-2 flex-wrap">
+                            {colorOptions.map((color) => (
+                              <button
+                                key={color.value}
+                                onClick={() => setNewTagColor(color.value)}
+                                className={`w-8 h-8 rounded-full ${color.class} ${
+                                  newTagColor === color.value
+                                    ? 'ring-2 ring-offset-2 ring-emerald-500'
+                                    : ''
+                                }`}
+                                title={color.label}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <DialogClose asChild>
+                          <Button variant="outline">取消</Button>
+                        </DialogClose>
+                        <Button
+                          onClick={() => currentCategory && addTagMutation.mutate({
+                            name: newTagName,
+                            categoryId: currentCategory.id,
+                            color: newTagColor
+                          })}
+                          disabled={!newTagName || addTagMutation.isPending}
+                          className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white"
+                        >
+                          {addTagMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          新增
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </CardHeader>
+              <CardContent>
+                {currentCategory?.tags && currentCategory.tags.length > 0 ? (
+                  <div className="space-y-2">
+                    {currentCategory.tags.map((tag) => (
+                      <div
+                        key={tag.id}
+                        className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                      >
+                        <div className={`w-4 h-4 rounded-full ${getColorClass(tag.color)}`} />
+                        <span className="flex-1 text-foreground">{tag.name}</span>
+                        <Switch
+                          checked={tag.isActive}
+                          onCheckedChange={(checked) => updateTagMutation.mutate({
+                            id: tag.id,
+                            data: { isActive: checked }
+                          })}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingTag(tag)}
+                        >
+                          <Pencil className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm('確定要刪除此標籤？')) {
+                              deleteTagMutation.mutate(tag.id)
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    {currentCategory ? '此分類尚無標籤' : '請先選擇分類'}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Edit Tag Dialog */}
+          <Dialog open={!!editingTag} onOpenChange={(open) => !open && setEditingTag(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>編輯標籤</DialogTitle>
+              </DialogHeader>
+              {editingTag && (
+                <div className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label>標籤名稱</Label>
+                    <Input
+                      value={editingTag.name}
+                      onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>顏色</Label>
+                    <div className="flex gap-2 flex-wrap">
+                      {colorOptions.map((color) => (
+                        <button
+                          key={color.value}
+                          onClick={() => setEditingTag({ ...editingTag, color: color.value })}
+                          className={`w-8 h-8 rounded-full ${color.class} ${
+                            editingTag.color === color.value
+                              ? 'ring-2 ring-offset-2 ring-emerald-500'
+                              : ''
+                          }`}
+                          title={color.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">取消</Button>
+                </DialogClose>
+                <Button
+                  onClick={() => editingTag && updateTagMutation.mutate({
+                    id: editingTag.id,
+                    data: { name: editingTag.name, color: editingTag.color }
+                  })}
+                  disabled={updateTagMutation.isPending}
+                  className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white"
+                >
+                  {updateTagMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  儲存
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
 
         {/* Users Management */}
         <TabsContent value="users" className="mt-4">
@@ -210,67 +563,15 @@ export default function AdminSettingsPage() {
 
         {/* Options Management */}
         <TabsContent value="options" className="mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Category List */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">選項分類</CardTitle>
-              </CardHeader>
-              <CardContent className="p-2">
-                <div className="space-y-1">
-                  {mockOptionCategories.map((cat) => (
-                    <button
-                      key={cat.category}
-                      onClick={() => setSelectedCategory(cat.category)}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                        selectedCategory === cat.category
-                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                          : 'text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Options List */}
-            <Card className="lg:col-span-3">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>{currentCategory?.label}</CardTitle>
-                  <CardDescription>
-                    管理下拉選單選項（可新增、編輯、停用、排序）
-                  </CardDescription>
-                </div>
-                <Button size="sm" className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white">
-                  <Plus className="w-4 h-4 mr-1" />
-                  新增選項
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {currentCategory?.options.map((option) => (
-                    <div
-                      key={option.value}
-                      className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                    >
-                      <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                      <span className="flex-1 text-foreground">{option.label}</span>
-                      <code className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                        {option.value}
-                      </code>
-                      <Switch checked={option.isActive} />
-                      <Button variant="ghost" size="icon">
-                        <Pencil className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>選項管理</CardTitle>
+              <CardDescription>管理案件類型、職業等下拉選單選項（功能開發中）</CardDescription>
+            </CardHeader>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              此功能尚在開發中
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* System Settings */}

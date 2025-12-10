@@ -25,10 +25,28 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, Filter, MoreHorizontal, Phone, MapPin, Eye, Pencil, Loader2 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
+import { Plus, Search, Filter, MoreHorizontal, Phone, MapPin, Eye, Pencil, Loader2, Trash2, Tags } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+
+interface Tag {
+  id: string
+  name: string
+  color: string | null
+}
 
 interface Constituent {
   id: string
@@ -36,12 +54,31 @@ interface Constituent {
   phone: string | null
   district: { township: string; village: string } | null
   relationLevel: string | null
-  tags: { tag: { name: string } }[]
+  tags: { tag: Tag }[]
+}
+
+interface TagCategory {
+  id: string
+  name: string
+  tags: Tag[]
+}
+
+const colorClasses: Record<string, string> = {
+  emerald: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/50',
+  blue: 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/50',
+  purple: 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/50',
+  amber: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/50',
+  red: 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/50',
+  pink: 'bg-pink-500/20 text-pink-600 dark:text-pink-400 border-pink-500/50',
+  gray: 'bg-gray-500/20 text-gray-600 dark:text-gray-400 border-gray-500/50'
 }
 
 export default function ConstituentsPage() {
   const [search, setSearch] = useState('')
   const [relationFilter, setRelationFilter] = useState<string>('all')
+  const [tagFilter, setTagFilter] = useState<string>('all')
+  const [deleteTarget, setDeleteTarget] = useState<Constituent | null>(null)
+  const queryClient = useQueryClient()
 
   // 從真實 API 獲取資料
   const { data: constituents = [], isLoading } = useQuery({
@@ -54,13 +91,39 @@ export default function ConstituentsPage() {
     }
   })
 
+  // 取得所有標籤分類
+  const { data: categories = [] } = useQuery<TagCategory[]>({
+    queryKey: ['tag-categories'],
+    queryFn: async () => {
+      const res = await fetch('/api/tag-categories')
+      if (!res.ok) throw new Error('Failed to fetch')
+      return res.json()
+    }
+  })
+
+  // 刪除選民
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/constituents/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete')
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['constituents'] })
+      setDeleteTarget(null)
+      toast.success('選民已刪除')
+    },
+    onError: () => toast.error('刪除失敗')
+  })
+
   const filteredConstituents = constituents.filter((c: Constituent) => {
     const districtName = c.district ? `${c.district.township}${c.district.village}` : ''
     const matchSearch = c.name.includes(search) || 
       (c.phone && c.phone.includes(search)) || 
       districtName.includes(search)
     const matchRelation = relationFilter === 'all' || c.relationLevel === relationFilter
-    return matchSearch && matchRelation
+    const matchTag = tagFilter === 'all' || c.tags.some(t => t.tag.id === tagFilter)
+    return matchSearch && matchRelation && matchTag
   })
 
   const getRelationBadge = (level: string) => {
@@ -74,6 +137,10 @@ export default function ConstituentsPage() {
       default:
         return <Badge variant="outline">未分級</Badge>
     }
+  }
+
+  const getTagColorClass = (color: string | null) => {
+    return colorClasses[color || 'gray'] || colorClasses.gray
   }
 
   return (
@@ -115,6 +182,27 @@ export default function ConstituentsPage() {
                 <SelectItem value="A">A級-鐵票</SelectItem>
                 <SelectItem value="B">B級-友善</SelectItem>
                 <SelectItem value="C">C級-搖擺</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={tagFilter} onValueChange={setTagFilter}>
+              <SelectTrigger className="w-full sm:w-44">
+                <Tags className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="標籤篩選" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部標籤</SelectItem>
+                {categories.map(category => (
+                  <div key={category.id}>
+                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                      {category.name}
+                    </div>
+                    {category.tags.map(tag => (
+                      <SelectItem key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </SelectItem>
+                    ))}
+                  </div>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -182,17 +270,21 @@ export default function ConstituentsPage() {
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {constituent.tags && constituent.tags.length > 0 ? (
-                            constituent.tags.map((t) => (
+                            constituent.tags.slice(0, 3).map((t) => (
                               <Badge
-                                key={t.tag.name}
-                                variant="outline"
-                                className="text-xs"
+                                key={t.tag.id}
+                                className={`text-xs ${getTagColorClass(t.tag.color)}`}
                               >
                                 {t.tag.name}
                               </Badge>
                             ))
                           ) : (
                             <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                          {constituent.tags && constituent.tags.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{constituent.tags.length - 3}
+                            </Badge>
                           )}
                         </div>
                       </TableCell>
@@ -216,6 +308,14 @@ export default function ConstituentsPage() {
                                 編輯
                               </Link>
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-red-600 dark:text-red-400"
+                              onClick={() => setDeleteTarget(constituent)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              刪除
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -227,6 +327,32 @@ export default function ConstituentsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>確定要刪除此選民嗎？</AlertDialogTitle>
+            <AlertDialogDescription>
+              即將刪除選民「{deleteTarget?.name}」的資料。此操作可以復原（軟刪除）。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              刪除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

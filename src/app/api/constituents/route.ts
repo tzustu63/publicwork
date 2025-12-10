@@ -10,7 +10,7 @@ const constituentSchema = z.object({
   phone2: z.string().optional(),
   email: z.string().optional(),
   birthday: z.string().optional(),
-  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional().or(z.literal('')),
+  gender: z.string().optional(), // 允許空字串，後續再轉換
   occupation: z.string().optional(),
   note: z.string().optional(),
   districtId: z.string().nullable().optional(),
@@ -18,6 +18,8 @@ const constituentSchema = z.object({
   relationLevel: z.string().optional(),
   influence: z.string().optional()
 })
+
+type GenderType = 'MALE' | 'FEMALE' | 'OTHER' | null
 
 // GET /api/constituents - 取得選民列表
 export async function GET(request: NextRequest) {
@@ -90,14 +92,20 @@ export async function POST(request: NextRequest) {
     const validatedData = constituentSchema.parse(body)
     console.log('Validated data:', JSON.stringify(validatedData, null, 2))
 
-    // 清理空字串為 null
+    // 清理空字串為 null，並驗證 gender
+    const genderValue = validatedData.gender
+    const validGenders = ['MALE', 'FEMALE', 'OTHER']
+    const gender: GenderType = (genderValue && validGenders.includes(genderValue)) 
+      ? genderValue as GenderType 
+      : null
+
     const cleanData = {
       name: validatedData.name,
       phone: validatedData.phone || null,
       phone2: validatedData.phone2 || null,
       email: validatedData.email || null,
       birthday: validatedData.birthday ? new Date(validatedData.birthday) : null,
-      gender: (validatedData.gender && validatedData.gender !== '') ? validatedData.gender : null,
+      gender,
       occupation: validatedData.occupation || null,
       note: validatedData.note || null,
       districtId: validatedData.districtId || null,
@@ -117,8 +125,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(constituent, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('Zod validation error:', JSON.stringify(error.errors, null, 2))
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      console.error('Zod validation error:', JSON.stringify(error.issues, null, 2))
+      return NextResponse.json({ error: error.issues }, { status: 400 })
     }
     console.error('Error creating constituent:', error)
     return NextResponse.json({ error: '新增選民失敗' }, { status: 500 })

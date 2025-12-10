@@ -1,4 +1,4 @@
-import { PrismaClient, Role } from '@prisma/client'
+import { PrismaClient, Role, Gender } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -91,14 +91,176 @@ const defaultOptions = [
   { category: 'influence', value: 'business_association', label: '商業公會' }
 ]
 
-// 預設標籤分類
-const defaultTagCategories = [
-  { name: '案件類別', sortOrder: 1 },
-  { name: '職業身分', sortOrder: 2 },
-  { name: '關係等級', sortOrder: 3 },
-  { name: '影響力', sortOrder: 4 },
-  { name: '地區標籤', sortOrder: 5 },
-  { name: '其他', sortOrder: 99 }
+// 預設標籤分類和標籤
+const defaultTagsData = [
+  {
+    categoryName: '服務紀錄',
+    sortOrder: 1,
+    tags: [
+      { name: '曾協助案件', color: 'emerald' },
+      { name: '曾出席活動', color: 'blue' },
+      { name: '曾捐款支持', color: 'amber' },
+      { name: '志工', color: 'purple' }
+    ]
+  },
+  {
+    categoryName: '特殊身分',
+    sortOrder: 2,
+    tags: [
+      { name: '里長', color: 'red' },
+      { name: '鄰長', color: 'pink' },
+      { name: '社區理事長', color: 'amber' },
+      { name: '學校家長會', color: 'blue' },
+      { name: '宗親會', color: 'purple' },
+      { name: '農會', color: 'emerald' }
+    ]
+  },
+  {
+    categoryName: '議題關注',
+    sortOrder: 3,
+    tags: [
+      { name: '環保議題', color: 'emerald' },
+      { name: '教育議題', color: 'blue' },
+      { name: '交通建設', color: 'amber' },
+      { name: '社會福利', color: 'pink' },
+      { name: '農業發展', color: 'emerald' }
+    ]
+  },
+  {
+    categoryName: '選舉標記',
+    sortOrder: 4,
+    tags: [
+      { name: '樁腳', color: 'red' },
+      { name: '積極支持者', color: 'emerald' },
+      { name: '需關注', color: 'amber' },
+      { name: '對手支持者', color: 'gray' }
+    ]
+  }
+]
+
+// 測試選民資料
+const testConstituents = [
+  {
+    name: '王大明',
+    phone: '0912-345-678',
+    email: 'wang@example.com',
+    birthday: new Date('1975-03-15'),
+    gender: Gender.MALE,
+    occupation: 'business_owner',
+    relationLevel: 'A',
+    note: '經營早餐店，在地方有影響力',
+    township: '花蓮市',
+    village: '民生里',
+    address: '中山路123號'
+  },
+  {
+    name: '李小華',
+    phone: '0923-456-789',
+    email: 'lee@example.com',
+    birthday: new Date('1982-07-22'),
+    gender: Gender.FEMALE,
+    occupation: 'teacher',
+    relationLevel: 'A',
+    note: '國小老師，熱心公益',
+    township: '吉安鄉',
+    village: '北昌村',
+    address: '中央路456號'
+  },
+  {
+    name: '陳美玲',
+    phone: '0934-567-890',
+    birthday: new Date('1968-11-08'),
+    gender: Gender.FEMALE,
+    occupation: 'homemaker',
+    relationLevel: 'B',
+    note: '社區媽媽教室成員',
+    township: '花蓮市',
+    village: '國光里',
+    address: '國光街78號'
+  },
+  {
+    name: '林志明',
+    phone: '0945-678-901',
+    birthday: new Date('1990-05-30'),
+    gender: Gender.MALE,
+    occupation: 'worker',
+    relationLevel: 'B',
+    township: '新城鄉',
+    village: '北埔村',
+    address: '北埔路99號'
+  },
+  {
+    name: '張淑芬',
+    phone: '0956-789-012',
+    email: 'chang@example.com',
+    birthday: new Date('1978-09-12'),
+    gender: Gender.FEMALE,
+    occupation: 'civil_servant',
+    relationLevel: 'A',
+    note: '縣府員工，里長太太',
+    township: '花蓮市',
+    village: '民政里',
+    address: '民政路55號'
+  },
+  {
+    name: '黃建國',
+    phone: '0967-890-123',
+    birthday: new Date('1965-01-25'),
+    gender: Gender.MALE,
+    occupation: 'farmer',
+    relationLevel: 'A',
+    note: '農會理事',
+    township: '壽豐鄉',
+    village: '壽豐村',
+    address: '壽豐路168號'
+  },
+  {
+    name: '劉雅婷',
+    phone: '0978-901-234',
+    birthday: new Date('1995-12-03'),
+    gender: Gender.FEMALE,
+    occupation: 'freelancer',
+    relationLevel: 'C',
+    township: '花蓮市',
+    village: '國安里'
+  },
+  {
+    name: '吳文賢',
+    phone: '0989-012-345',
+    birthday: new Date('1958-06-18'),
+    gender: Gender.MALE,
+    occupation: 'retired',
+    relationLevel: 'B',
+    note: '退休校長',
+    township: '吉安鄉',
+    village: '宜昌村',
+    address: '宜昌路200號'
+  },
+  {
+    name: '許家豪',
+    phone: '0911-222-333',
+    birthday: new Date('1988-04-07'),
+    gender: Gender.MALE,
+    occupation: 'business_owner',
+    relationLevel: 'B',
+    note: '經營便利商店',
+    township: '花蓮市',
+    village: '主權里',
+    address: '中正路88號'
+  },
+  {
+    name: '周美珍',
+    phone: '0922-333-444',
+    email: 'chou@example.com',
+    birthday: new Date('1972-08-20'),
+    gender: Gender.FEMALE,
+    occupation: 'medical',
+    relationLevel: 'A',
+    note: '護理師，社區健康志工',
+    township: '花蓮市',
+    village: '國福里',
+    address: '國福路66號'
+  }
 ]
 
 async function main() {
@@ -147,9 +309,10 @@ async function main() {
 
   // 3. 建立花蓮縣行政區資料
   console.log('🗺️ 建立花蓮縣行政區資料...')
+  const districtMap: Record<string, string> = {} // township_village -> districtId
   for (const district of hualienDistricts) {
     for (const village of district.villages) {
-      await prisma.district.upsert({
+      const created = await prisma.district.upsert({
         where: {
           city_township_village: {
             city: '花蓮縣',
@@ -164,6 +327,7 @@ async function main() {
           village: village
         }
       })
+      districtMap[`${district.township}_${village}`] = created.id
     }
   }
 
@@ -188,17 +352,101 @@ async function main() {
     })
   }
 
-  // 5. 建立標籤分類
-  console.log('🏷️ 建立標籤分類...')
-  for (const category of defaultTagCategories) {
-    await prisma.tagCategory.upsert({
-      where: { name: category.name },
-      update: { sortOrder: category.sortOrder },
+  // 5. 建立標籤分類和標籤
+  console.log('🏷️ 建立標籤分類和標籤...')
+  const tagMap: Record<string, string> = {} // tagName -> tagId
+  for (const categoryData of defaultTagsData) {
+    const category = await prisma.tagCategory.upsert({
+      where: { name: categoryData.categoryName },
+      update: { sortOrder: categoryData.sortOrder },
       create: {
-        name: category.name,
-        sortOrder: category.sortOrder
+        name: categoryData.categoryName,
+        sortOrder: categoryData.sortOrder
       }
     })
+
+    for (let i = 0; i < categoryData.tags.length; i++) {
+      const tagData = categoryData.tags[i]
+      const tag = await prisma.tag.upsert({
+        where: {
+          categoryId_name: {
+            categoryId: category.id,
+            name: tagData.name
+          }
+        },
+        update: { color: tagData.color, sortOrder: i },
+        create: {
+          name: tagData.name,
+          color: tagData.color,
+          categoryId: category.id,
+          sortOrder: i
+        }
+      })
+      tagMap[tagData.name] = tag.id
+    }
+  }
+
+  // 6. 建立測試選民資料
+  console.log('👥 建立測試選民資料...')
+  for (const data of testConstituents) {
+    const districtId = districtMap[`${data.township}_${data.village}`]
+    
+    await prisma.constituent.upsert({
+      where: {
+        id: `test-${data.name}`
+      },
+      update: {},
+      create: {
+        id: `test-${data.name}`,
+        name: data.name,
+        phone: data.phone || null,
+        email: data.email || null,
+        birthday: data.birthday || null,
+        gender: data.gender || null,
+        occupation: data.occupation || null,
+        relationLevel: data.relationLevel || null,
+        note: data.note || null,
+        districtId: districtId || null,
+        address: data.address || null,
+        officeId: office.id
+      }
+    })
+  }
+
+  // 7. 為部分選民加上標籤
+  console.log('🔖 為選民加上標籤...')
+  const tagAssignments = [
+    { constituentName: '王大明', tags: ['曾協助案件', '積極支持者'] },
+    { constituentName: '李小華', tags: ['曾出席活動', '志工', '教育議題'] },
+    { constituentName: '張淑芬', tags: ['里長', '樁腳'] },
+    { constituentName: '黃建國', tags: ['農會', '農業發展', '積極支持者'] },
+    { constituentName: '周美珍', tags: ['志工', '社會福利', '曾協助案件'] }
+  ]
+
+  for (const assignment of tagAssignments) {
+    const constituent = await prisma.constituent.findFirst({
+      where: { name: assignment.constituentName }
+    })
+    if (constituent) {
+      for (const tagName of assignment.tags) {
+        const tagId = tagMap[tagName]
+        if (tagId) {
+          await prisma.constituentTag.upsert({
+            where: {
+              constituentId_tagId: {
+                constituentId: constituent.id,
+                tagId: tagId
+              }
+            },
+            update: {},
+            create: {
+              constituentId: constituent.id,
+              tagId: tagId
+            }
+          })
+        }
+      }
+    }
   }
 
   console.log('✅ Seed 完成！')
@@ -206,6 +454,9 @@ async function main() {
   console.log('📧 測試帳號：')
   console.log('   管理員：admin@example.com / admin123')
   console.log('   助理：staff@example.com / admin123')
+  console.log('')
+  console.log('👥 測試選民：已建立 10 筆選民資料')
+  console.log('🏷️ 標籤分類：已建立 4 個分類，共 19 個標籤')
 }
 
 main()
@@ -216,5 +467,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect()
   })
-
-

@@ -87,7 +87,7 @@ export async function POST(
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      return NextResponse.json({ error: error.issues }, { status: 400 })
     }
     console.error('Error creating case progress:', error)
     return NextResponse.json({ error: '新增案件進度失敗' }, { status: 500 })

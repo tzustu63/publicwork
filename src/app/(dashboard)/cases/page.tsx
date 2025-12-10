@@ -15,10 +15,19 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Plus, Search, Filter, Clock, AlertCircle, CheckCircle, FileText } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, differenceInDays } from 'date-fns'
 import { zhTW } from 'date-fns/locale'
 
-// 模擬資料
+// 計算超期天數的閾值
+const OVERDUE_DAYS = 7
+
+// 模擬資料（使用相對天數）
+const createMockDate = (daysAgo: number) => {
+  const date = new Date()
+  date.setDate(date.getDate() - daysAgo)
+  return date
+}
+
 const mockCases = [
   {
     id: '1',
@@ -28,8 +37,8 @@ const mockCases = [
     status: 'IN_PROGRESS',
     priority: 'HIGH',
     constituent: '王大明',
-    createdAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    createdAt: createMockDate(12),
+    updatedAt: createMockDate(2),
     progressCount: 3
   },
   {
@@ -40,8 +49,8 @@ const mockCases = [
     status: 'IN_PROGRESS',
     priority: 'NORMAL',
     constituent: '李小華',
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    createdAt: createMockDate(5),
+    updatedAt: createMockDate(1),
     progressCount: 2
   },
   {
@@ -52,8 +61,8 @@ const mockCases = [
     status: 'PENDING',
     priority: 'NORMAL',
     constituent: '陳美玲',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    createdAt: createMockDate(3),
+    updatedAt: createMockDate(3),
     progressCount: 0
   },
   {
@@ -64,8 +73,8 @@ const mockCases = [
     status: 'CLOSED',
     priority: 'LOW',
     constituent: '林淑芬',
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    createdAt: createMockDate(10),
+    updatedAt: createMockDate(1),
     progressCount: 4
   }
 ]
@@ -104,8 +113,7 @@ export default function CasesPage() {
   }
 
   const isOverdue = (updatedAt: Date) => {
-    const daysSinceUpdate = (Date.now() - updatedAt.getTime()) / (1000 * 60 * 60 * 24)
-    return daysSinceUpdate > 7
+    return differenceInDays(new Date(), updatedAt) > OVERDUE_DAYS
   }
 
   const filteredCases = mockCases.filter((c) => {

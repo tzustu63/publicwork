@@ -14,13 +14,24 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const city = searchParams.get('city') || '花蓮縣'
     const township = searchParams.get('township')
+    const all = searchParams.get('all') === 'true'
+
+    // 取得所有行政區（供 cascading select 用）
+    if (all) {
+      const districts = await prisma.district.findMany({
+        where: { city },
+        orderBy: [{ township: 'asc' }, { village: 'asc' }]
+      })
+      return NextResponse.json(districts)
+    }
 
     // 取得鄉鎮列表
     if (!township) {
       const townships = await prisma.district.findMany({
         where: { city },
         select: { township: true },
-        distinct: ['township']
+        distinct: ['township'],
+        orderBy: { township: 'asc' }
       })
       return NextResponse.json(townships.map(t => t.township))
     }
