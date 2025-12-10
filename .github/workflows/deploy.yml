@@ -91,8 +91,24 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
             cd /opt/constituent-crm
-            docker compose pull
-            docker compose up -d
+            
+            # 登入 GitHub Container Registry
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # 拉取最新映像檔並重啟
+            docker compose -f docker-compose.lightsail.yml pull
+            docker compose -f docker-compose.lightsail.yml up -d
+            
+            # 等待服務啟動
+            sleep 10
+            
+            # 執行資料庫遷移（如果有新的 migration）
+            docker compose -f docker-compose.lightsail.yml exec -T crm-app npx prisma migrate deploy || true
+            
+            # 清理舊映像檔
             docker image prune -f
+            
+            # 健康檢查
+            curl -f http://localhost:3001/api/health || echo "健康檢查失敗，請檢查日誌"
 
 

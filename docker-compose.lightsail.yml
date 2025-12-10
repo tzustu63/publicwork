@@ -1,0 +1,64 @@
+version: '3.8'
+
+# 選民服務管理系統 - Lightsail 生產環境
+# 使用專屬網路、端口、Volume，完全獨立於其他服務
+
+services:
+  # Next.js 應用程式
+  crm-app:
+    container_name: crm-app
+    image: ghcr.io/tzustu63/publicwork:latest
+    ports:
+      - "3001:3000"  # 對外 3001，避免與其他服務衝突
+    environment:
+      - DATABASE_URL=postgresql://crm_user:${DB_PASSWORD}@crm-db:5432/constituent_crm?schema=public
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-https://crm.harvestwize.com}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NODE_ENV=production
+    depends_on:
+      crm-db:
+        condition: service_healthy
+    volumes:
+      - crm-uploads:/app/uploads
+    networks:
+      - crm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL 資料庫 - 獨立實例
+  crm-db:
+    container_name: crm-db
+    image: postgres:16-alpine
+    # 不對外暴露端口，只有內部網路可存取
+    environment:
+      POSTGRES_USER: crm_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: constituent_crm
+    volumes:
+      - crm-postgres-data:/var/lib/postgresql/data
+    networks:
+      - crm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_user -d constituent_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+# 專屬網路（與其他 Docker 服務完全隔離）
+networks:
+  crm-network:
+    name: crm-network
+    driver: bridge
+
+# 專屬 Volume（資料持久化，名稱獨立）
+volumes:
+  crm-postgres-data:
+    name: crm-postgres-data
+  crm-uploads:
+    name: crm-uploads
